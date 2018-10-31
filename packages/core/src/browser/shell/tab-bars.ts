@@ -23,6 +23,8 @@ import { Signal } from '@phosphor/signaling';
 import { Message } from '@phosphor/messaging';
 import { ArrayExt } from '@phosphor/algorithm';
 import { ElementExt } from '@phosphor/domutils';
+import { TabBarToolbarRegistry, TabBarToolbar } from './tab-bar-toolbar';
+import { WidgetTracker } from '../widgets';
 
 /** The class name added to hidden content nodes, which are required to render vertical side bars. */
 const HIDDEN_CONTENT_CLASS = 'theia-TabBar-hidden-content';
@@ -188,7 +190,7 @@ export class ScrollableTabBar extends TabBar<Widget> {
 
     constructor(options?: TabBar.IOptions<Widget> & PerfectScrollbar.Options) {
         super(options);
-        this.scrollBarFactory = () => new PerfectScrollbar(this.node, options);
+        this.scrollBarFactory = () => new PerfectScrollbar(this.scrollbarHost, options);
     }
 
     protected onAfterAttach(msg: Message): void {
@@ -236,7 +238,7 @@ export class ScrollableTabBar extends TabBar<Widget> {
             window.requestAnimationFrame(() => {
                 const tab = this.contentNode.children[index] as HTMLElement;
                 if (tab && this.isVisible) {
-                    const parent = this.node;
+                    const parent = this.scrollbarHost;
                     if (this.orientation === 'horizontal') {
                         const scroll = parent.scrollLeft;
                         const left = tab.offsetLeft;
@@ -269,6 +271,138 @@ export class ScrollableTabBar extends TabBar<Widget> {
         });
         this.pendingReveal = result;
         return result;
+    }
+
+    protected get scrollbarHost(): HTMLElement {
+        return this.node;
+    }
+
+}
+
+export class ToolbarAwareTabBar extends ScrollableTabBar {
+
+    protected contentContainer: HTMLElement | undefined;
+    protected toolbar: TabBarToolbar | undefined;
+
+    constructor(
+        protected readonly tabBarToolbarRegistry: TabBarToolbarRegistry,
+        protected readonly widgetTracker: WidgetTracker,
+        protected readonly tabBarToolbarFactory: () => TabBarToolbar,
+        protected readonly options?: TabBar.IOptions<Widget> & PerfectScrollbar.Options) {
+
+        super(options);
+        this.rewireDOM();
+    }
+
+    get contentNode(): HTMLUListElement {
+        return this.tabBarContainer.getElementsByClassName(ToolbarAwareTabBar.Styles.TAB_BAR_CONTENT)[0] as HTMLUListElement;
+    }
+
+    protected get scrollbarHost(): HTMLElement {
+        return this.tabBarContainer;
+    }
+
+    protected get tabBarContainer(): HTMLElement {
+        return this.node.getElementsByClassName(ToolbarAwareTabBar.Styles.TAB_BAR_CONTENT_CONTAINER)[0] as HTMLElement;
+    }
+
+    protected onBeforeDetach(msg: Message): void {
+        if (this.contentContainer) {
+            this.node.removeChild(this.contentContainer);
+        }
+        if (this.toolbar && this.toolbar.isAttached) {
+            Widget.detach(this.toolbar);
+        }
+        this.widgetTracker.currentChanged.disconnect(this.onCurrentChanged, this);
+        super.onBeforeDetach(msg);
+    }
+
+    addTab(value: Title<Widget> | Title.IOptions<Widget>): Title<Widget> {
+        const result = super.addTab(value);
+        this.onCurrentChanged();
+        return result;
+    }
+
+    insertTab(index: number, value: Title<Widget> | Title.IOptions<Widget>): Title<Widget> {
+        const result = super.insertTab(index, value);
+        this.onCurrentChanged();
+        return result;
+    }
+
+    removeTab(title: Title<Widget>): void {
+        super.removeTab(title);
+        this.onCurrentChanged();
+    }
+
+    removeTabAt(index: number): void {
+        super.removeTabAt(index);
+        this.onCurrentChanged();
+    }
+
+    protected onAfterAttach(msg: Message): void {
+        this.widgetTracker.currentChanged.connect(this.onCurrentChanged, this);
+        if (this.toolbar) {
+            if (this.toolbar.isAttached) {
+                Widget.detach(this.toolbar);
+            }
+            Widget.attach(this.toolbar, this.node);
+            this.onCurrentChanged();
+        }
+        super.onAfterAttach(msg);
+    }
+
+    protected onCurrentChanged(): void {
+        this.updateToolbar(this.widgetTracker.currentWidget);
+    }
+
+    protected updateToolbar(widget: Widget | undefined, filterTitles: boolean = true): void {
+        if (this.toolbar && widget) {
+            if (filterTitles) {
+                // If the active widget does not belong to the current tab-bar, do nothing.
+                if (this.titles.map(title => title.owner).some(owner => owner === widget)) {
+                    const items = this.tabBarToolbarRegistry.activeItemsFor(widget);
+                    this.toolbar.updateItems(...items);
+                } else {
+                    // Otherwise, discard the state.
+                    this.toolbar.updateItems(...[]);
+                }
+            } else {
+                const items = this.tabBarToolbarRegistry.activeItemsFor(widget);
+                this.toolbar.updateItems(...items);
+            }
+        }
+    }
+
+    /**
+     * Restructures the DOM defined in PhosphorJS.
+     *
+     * By default the tabs (`li`) are contained in the `this.contentNode` (`lu`) which is wrapped in a `div` (`this.node`).
+     * Instead of this structure, we add a container for the `this.contentNode` and for the toolbar.
+     * The scrollbar will only work for the `ul` part but it does not affect the toolbar, so it can be on the right hand-side.
+     */
+    protected rewireDOM(): void {
+        const contentNode = this.node.getElementsByClassName(ToolbarAwareTabBar.Styles.TAB_BAR_CONTENT)[0];
+        if (!contentNode) {
+            throw new Error("'this.node' does not have the content as a direct children with class name 'p-TabBar-content'.");
+        }
+        this.node.removeChild(contentNode);
+        this.contentContainer = document.createElement('div');
+        this.contentContainer.classList.add(ToolbarAwareTabBar.Styles.TAB_BAR_CONTENT_CONTAINER);
+        this.contentContainer.appendChild(contentNode);
+        this.node.appendChild(this.contentContainer);
+
+        this.toolbar = this.tabBarToolbarFactory();
+    }
+
+}
+
+export namespace ToolbarAwareTabBar {
+
+    export namespace Styles {
+
+        export const TAB_BAR_CONTENT = 'p-TabBar-content';
+        export const TAB_BAR_CONTENT_CONTAINER = 'p-TabBar-content-container';
+
     }
 
 }
