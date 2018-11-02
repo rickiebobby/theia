@@ -72,12 +72,12 @@ export namespace DebugCommands {
         label: 'Debug: Restart Debugging'
     };
 
-    export const OPEN_CONFIGURATION = {
-        id: 'debug.configuration.open',
-        label: 'Debug: Open Configuration'
+    export const OPEN_CONFIGURATIONS = {
+        id: 'debug.configurations.open',
+        label: 'Debug: Open Configurations'
     };
     export const ADD_CONFIGURATION = {
-        id: 'debug.configuration.add',
+        id: 'debug.configurations.add',
         label: 'Debug: Add Configuration...'
     };
 
@@ -367,7 +367,7 @@ export class DebugFrontendApplicationContribution extends AbstractViewContributi
             DebugCommands.RESTART
         );
         registerMenuActions(DebugMenus.DEBUG_CONFIGURATION,
-            DebugCommands.OPEN_CONFIGURATION,
+            DebugCommands.OPEN_CONFIGURATIONS,
             DebugCommands.ADD_CONFIGURATION
         );
         registerMenuActions(DebugMenus.DEBUG_THREADS,
@@ -454,7 +454,7 @@ export class DebugFrontendApplicationContribution extends AbstractViewContributi
             isEnabled: () => this.manager.state !== DebugState.Inactive
         });
 
-        registry.registerCommand(DebugCommands.OPEN_CONFIGURATION, {
+        registry.registerCommand(DebugCommands.OPEN_CONFIGURATIONS, {
             execute: () => this.confiugurations.openConfiguration()
         });
         registry.registerCommand(DebugCommands.ADD_CONFIGURATION, {
