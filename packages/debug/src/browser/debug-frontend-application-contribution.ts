@@ -281,10 +281,6 @@ export class DebugFrontendApplicationContribution extends AbstractViewContributi
         });
     }
 
-    async initializeLayout(): Promise<void> {
-        await this.openView();
-    }
-
     protected firstSessionStart = true;
     async onStart(): Promise<void> {
         this.manager.onDidCreateDebugSession(session => this.openSession(session, { reveal: false }));
